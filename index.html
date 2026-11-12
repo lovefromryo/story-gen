@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AI 互动小说</title>
+<style>
+  :root{--bg:#12131a;--card:#1c1e29;--card2:#232636;--line:#2c2f40;--txt:#e7e8ef;--dim:#8b90a6;--acc:#7c8cff;--warn:#ff7c8c}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.7 system-ui,-apple-system,"Microsoft YaHei",sans-serif;
+       display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+  .bar{display:flex;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);flex:none}
+  .bar b{font-size:15px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .icon{width:38px;height:38px;padding:0;display:grid;place-items:center;font-size:16px}
+  button{background:var(--card);color:var(--txt);border:1px solid var(--line);border-radius:10px;
+         padding:8px 12px;font-size:14px;cursor:pointer;font-family:inherit}
+  button:active{transform:scale(.97)}
+  button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+  button.ghost{background:transparent}
+  button.danger{color:var(--warn);border-color:#432}
+  input,textarea,select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;
+        color:var(--txt);padding:10px 12px;font-size:14px;font-family:inherit}
+  textarea{resize:vertical}
+  label{display:block;font-size:13px;color:var(--dim);margin:0 0 6px}
+
+  #log{flex:1;overflow-y:auto;padding:16px 16px 8px}
+  .msg{max-width:760px;margin:0 auto 18px}
+  .me{color:var(--dim);font-size:13px;margin-bottom:4px}
+  .story{white-space:pre-wrap}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px auto 0;max-width:760px}
+  .chips button{text-align:left;font-size:14px;color:var(--acc);background:transparent}
+  #status{color:var(--dim);font-size:12px;padding:0 16px 6px;max-width:760px;margin:0 auto;width:100%}
+  #bar{border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));flex:none}
+  #bar .wrap{display:flex;gap:8px;max-width:760px;margin:0 auto;align-items:flex-end}
+  #inp{flex:1;max-height:140px;min-height:44px}
+
+  /* 抽拉栏 */
+  #drawer{position:fixed;inset:0;z-index:20;display:none}
+  #drawer.on{display:block}
+  #mask{position:absolute;inset:0;background:#0008}
+  #panel{position:absolute;top:0;left:0;bottom:0;width:min(86vw,340px);background:var(--card);
+         border-right:1px solid var(--line);display:flex;flex-direction:column;transform:translateX(-100%);
+         transition:transform .22s ease}
+  #drawer.on #panel{transform:none}
+  .pHead{padding:14px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center}
+  .pHead b{flex:1;font-size:15px}
+  .pBody{flex:1;overflow-y:auto;padding:10px 10px 20px}
+  .sec{font-size:12px;color:var(--dim);padding:12px 8px 6px;display:flex;align-items:center;gap:8px}
+  .sec span{flex:1}
+  .sec button{padding:3px 9px;font-size:12px;border-radius:8px}
+  .item{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:14px}
+  .item:hover{background:var(--card2)}
+  .item.on{background:var(--card2);box-shadow:inset 2px 0 0 var(--acc)}
+  .item .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .item .s{font-size:12px;color:var(--dim);flex:none}
+  .item .x{font-size:13px;color:var(--dim);padding:2px 6px;border-radius:6px}
+  .empty{color:var(--dim);font-size:13px;padding:10px 12px}
+
+  /* 整页 */
+  .page{position:fixed;inset:0;z-index:30;background:var(--bg);display:none;flex-direction:column}
+  .page.on{display:flex}
+  .pScroll{flex:1;overflow-y:auto;padding:16px}
+  .pScroll .inner{max-width:680px;margin:0 auto}
+  .row{margin-bottom:14px}
+  .foot{padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line);
+         display:flex;gap:8px;justify-content:flex-end;flex:none}
+  .charCard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+  .charCard .h{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+  .charCard .h input{flex:1}
+  .tip{font-size:12px;color:var(--dim);line-height:1.6;margin-top:6px}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <button class="icon" id="btnDrawer">☰</button>
+  <b id="title">AI 互动小说</b>
+  <button class="icon" id="btnApi" title="API 接入">⚙</button>
+</div>
+<div id="log"></div>
+<div id="status"></div>
+<div id="bar"><div class="wrap">
+  <textarea id="inp" rows="1" placeholder="你想做什么…"></textarea>
+  <button class="pri" id="btnSend">发送</button>
+</div></div>
+
+<!-- 抽拉栏 -->
+<div id="drawer"><div id="mask"></div><div id="panel">
+  <div class="pHead"><b>剧本与存档</b><button class="icon ghost" id="drawerClose">✕</button></div>
+  <div class="pBody">
+    <div class="sec"><span>我的剧本</span><button id="btnNewWorld">+ 新建</button></div>
+    <div id="worldList"></div>
+    <div class="sec"><span>存档（新→旧）</span></div>
+    <div id="sessList"></div>
+  </div>
+</div></div>
+
+<!-- 剧本编辑（二级界面） -->
+<div class="page" id="pageWorld">
+  <div class="bar"><button class="icon ghost" id="worldBack">←</button><b id="worldTitle">新建剧本</b>
+    <button class="ghost" id="worldSave">保存</button></div>
+  <div class="pScroll"><div class="inner">
+    <div class="row"><label>剧本名</label><input id="wName" placeholder="例：海上列车疑案"></div>
+    <div class="row"><label>世界观 / 开局设定</label>
+      <textarea id="wWorld" rows="6" placeholder="时代、地点、规则、当前局势…"></textarea></div>
+    <div class="row"><label>主角（你扮演的人）</label><input id="wHero" placeholder="名字 · 身份 · 一句话性格"></div>
+    <div class="row"><label>文风</label><input id="wStyle" placeholder="例：克制的第三人称，多写细节与对话"></div>
+    <div class="row"><label style="margin-bottom:8px">角色卡（可选，会给模型当设定）</label>
+      <div id="charList"></div>
+      <button class="ghost" id="btnAddChar">+ 加一个角色</button></div>
+    <div class="tip">填完点右上角「保存」，然后在抽拉栏里点这个剧本的名字开始新故事。</div>
+  </div></div>
+</div>
+
+<!-- API 接入 -->
+<div class="page" id="pageApi">
+  <div class="bar"><button class="icon ghost" id="apiBack">←</button><b>API 接入</b><button class="ghost" id="apiSave">保存</button></div>
+  <div class="pScroll"><div class="inner">
+    <div class="row"><label>接口地址（OpenAI 兼容）</label>
+      <input id="aBase" placeholder="https://api.deepseek.com/chat/completions"></div>
+    <div class="row"><label>API Key</label><input id="aKey" type="password" placeholder="sk-...">
+      <div class="tip">只存在这台设备的浏览器里，不上传任何地方。</div></div>
+    <div class="row"><label>模型</label><input id="aModel" placeholder="deepseek-chat"></div>
+    <div class="row"><div style="display:flex;gap:8px">
+      <button id="aTest">测一下能不能连</button></div><div class="tip" id="aTestMsg"></div></div>
+  </div></div>
+</div>
+
+<script>
+/* ================= 数据 ================= */
+const K = {api:'ainovel:api', worlds:'ainovel:worlds', sess:'ainovel:sessions', last:'ainovel:last'};
+const J = (k,d)=>{ try{ return JSON.parse(localStorage.getItem(k)||'null') ?? d }catch(e){ return d } };
+const S = (k,v)=>localStorage.setItem(k,JSON.stringify(v));
+const uid = ()=>Math.random().toString(36).slice(2,9);
+const $ = s=>document.querySelector(s);
+
+let api  = J(K.api,{base:'https://api.deepseek.com/chat/completions',key:'',model:'deepseek-chat'});
+let worlds = J(K.worlds,[]);
+let sessions = J(K.sess,[]);      // {id,worldId,title,turn,summary,state,msgs,at}
+let cur = null;                   // 当前 session 对象
+let busy = false;
+let editingWorld = null;
+
+/* ================= 模型 ================= */
+function sysPrompt(w, cur){
+  const chars = (w.chars||[]).filter(c=>c.name).map(c=>`- ${c.name}：${c.desc||''}`).join('\n');
+  return `你是互动小说的叙事引擎，替玩家把一部故事一直演下去，并且记住所有前情。
+
+【剧本】${w.name||'未命名'}
+【世界观】
+${w.world||'（未填）'}
+
+【主角】${w.hero||'（未填）'}
+${chars?('【角色】\n'+chars+'\n'):''}
+【文风】${w.style||'第三人称，多写细节与对话，克制不煽情'}
+
+【输出格式】只输出一个 JSON 对象，不要代码块，不要任何多余文字：
+{"text":"这一回合的正文，200~450 字","choices":["3 个下一步的具体选项，每个不超过 20 字","...","..."],"state":{"人物":{},"物品":[],"地点":"","时间":"","剧情进度":""}}
+
+【硬性规则】
+1. 只写这一回合发生的事；不要替玩家做重大决定，写完停在玩家需要行动的地方。
+2. choices 必须基于当前局势，3 个选项方向各不相同。
+3. state 写"更新后的完整状态"，不是 diff；没变的字段照抄旧状态。
+4. 玩家的选择能成也能搞砸，失败要有后果，不要一味顺着。
+5. 感情戏点到为止，不写露骨内容。
+6. 动笔前先在心里过一遍：前情摘要、当前状态、主角在哪、和谁、身上有什么。`;
+}
+async function chat(messages, opts={}){
+  if(!api.key) throw new Error('还没填 API Key（右上角 ⚙）');
+  const base = api.base || 'https://api.deepseek.com/chat/completions';
+  const r = await fetch(base,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+api.key},
+    body:JSON.stringify(Object.assign({model:api.model||'deepseek-chat',messages},opts))
+  });
+  if(!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text()).slice(0,180));
+  const j = await r.json();
+  return j.choices?.[0]?.message?.content || '';
+}
+function parseJSON(raw, fallback){
+  try{ return JSON.parse(raw) }catch(e){}
+  const m = raw.match(/\{[\s\S]*\}/); if(m){ try{ return JSON.parse(m[0]) }catch(e){} }
+  return fallback;
+}
+async function callTurn(){
+  const w = worlds.find(x=>x.id===cur.worldId) || {};
+  const recent = cur.msgs.slice(-10);
+  const ctx = `【前情摘要】${cur.summary||'（故事刚开始）'}\n【当前状态】${JSON.stringify(cur.state||{})}\n【以下是最近的往来，最后一条是玩家的新行动】`;
+  const messages = [{role:'system',content:sysPrompt(w,cur)},{role:'user',content:ctx}];
+  recent.forEach(m=>{
+    if(m.role==='me') messages.push({role:'user',content:m.content});
+    else messages.push({role:'assistant',content:JSON.stringify({text:m.content,choices:m.choices||[],state:m.state||cur.state})});
+  });
+  const raw = await chat(messages,{temperature:1.15,response_format:{type:'json_object'}});
+  return parseJSON(raw,{text:raw,choices:[],state:cur.state});
+}
+async function summarize(){
+  const w = worlds.find(x=>x.id===cur.worldId) || {};
+  const body = cur.msgs.slice(-24).map(m=>(m.role==='me'?'玩家：':'旁白：')+m.content).join('\n');
+  const raw = await chat([
+    {role:'system',content:'你是小说档案员。把剧情压成摘要并整理状态。只输出 JSON：{"summary":"250 字以内的摘要，保留关键人物、地点、承诺、伏笔","state":{"人物":{},"物品":[],"地点":"","时间":"","剧情进度":""}}'},
+    {role:'user',content:`剧本：${w.name||''}\n上一版摘要：${cur.summary||'无'}\n上一版状态：${JSON.stringify(cur.state||{})}\n\n剧情：\n${body}`}
+  ],{temperature:0.5,response_format:{type:'json_object'}});
+  const o = parseJSON(raw,null); if(!o) return;
+  if(o.summary) cur.summary = o.summary;
+  if(o.state) cur.state = o.state;
+}
+
+/* ================= 存档 ================= */
+function persist(){
+  if(cur){ cur.at = Date.now(); }
+  S(K.sess, sessions);
+}
+function findSession(id){ return sessions.find(s=>s.id===id) }
+function startSession(worldId){
+  const w = worlds.find(x=>x.id===worldId); if(!w) return;
+  const s = {id:uid(), worldId, title:w.name||'新故事', turn:0, summary:'',
+             state:{}, msgs:[], at:Date.now()};
+  sessions.unshift(s); cur = s; persist(); localStorage.setItem(K.last,s.id);
+  closeDrawer(); renderChat(); inputFocus();
+}
+function openSession(id){
+  const s = findSession(id); if(!s) return;
+  cur = s; localStorage.setItem(K.last,id);
+  closeDrawer(); renderChat();
+}
+
+/* ================= 画面：对话 ================= */
+function esc(t){ const d=document.createElement('div'); d.textContent=t; return d.innerHTML }
+function bubble(role, text){
+  const d = document.createElement('div'); d.className='msg';
+  d.innerHTML = (role==='me'?'<div class="me">你</div>':'') + '<div class="story"></div>';
+  d.lastElementChild.textContent = text;
+  $('#log').appendChild(d); 
+}
+function choicesBox(list){
+  document.querySelectorAll('.chips').forEach(e=>e.remove());
+  if(!list||!list.length) return;
+  const box = document.createElement('div'); box.className='chips';
+  list.forEach(t=>{
+    const b = document.createElement('button'); b.textContent = t;
+    b.onclick = ()=>{ submit(t) }; box.appendChild(b);
+  });
+  $('#log').appendChild(box);
+}
+function toBottom(){ $('#log').scrollTop = $('#log').scrollHeight }
+function renderChat(){
+  const log = $('#log'); log.innerHTML='';
+  document.querySelectorAll('.chips').forEach(e=>e.remove());
+  if(!cur){
+    $('#title').textContent = 'AI 互动小说';
+    bubble('bot','点左上角 ☰ 打开抽拉栏：先在「我的剧本」里建一个剧本，或者选一个存档接着玩。');
+    $('#status').textContent = api.key ? '' : '还没填 API Key —— 点右上角 ⚙';
+    return;
+  }
+  $('#title').textContent = cur.title;
+  if(!cur.msgs.length){
+    bubble('bot','（故事还没开始。在下面写下你的第一步，或者先说一句话。）');
+  }else{
+    cur.msgs.forEach(m=> bubble(m.role==='me'?'me':'bot', m.content));
+    const last = [...cur.msgs].reverse().find(m=>m.role==='bot');
+    if(last && last.choices) choicesBox(last.choices);
+  }
+  $('#status').textContent = cur.turn ? ('第 '+cur.turn+' 回合' + (cur.summary?' · 有记忆':'') ) : '';
+  toBottom();
+}
+function setBusy(b, msg){ busy=b; $('#btnSend').disabled=b; $('#status').textContent = msg||''; }
+
+async function submit(text){
+  text = (text||'').trim(); if(!text || busy) return;
+  if(!cur){ openDrawer(); return; }
+  $('#inp').value='';
+  document.querySelectorAll('.chips').forEach(e=>e.remove());
+  bubble('me',text);
+  cur.msgs.push({role:'me',content:text});
+  setBusy(true,'正在写…'); toBottom();
+  try{
+    const o = await callTurn();
+    const body = (o.text||'（这段没写出来）').trim();
+    bubble('bot',body);
+    cur.msgs.push({role:'bot',content:body,choices:o.choices||[],state:o.state||cur.state});
+    if(o.state) cur.state = o.state;
+    cur.turn++; persist();
+    choicesBox(o.choices); toBottom();
+    if(cur.turn % 8 === 0){
+      setBusy(true,'正在整理记忆…');
+      try{ await summarize(); persist(); }catch(e){}
+    }
+    setBusy(false, '第 '+cur.turn+' 回合' + (cur.summary?' · 有记忆':''));
+  }catch(e){
+    bubble('bot','（出错了：'+e.message+'）');
+    setBusy(false,'出错啦');
+  }
+  toBottom();
+}
+function inputFocus(){ try{ $('#inp').focus() }catch(e){} }
+
+/* ================= 抽拉栏 ================= */
+function openDrawer(){ renderDrawer(); $('#drawer').classList.add('on') }
+function closeDrawer(){ $('#drawer').classList.remove('on') }
+function renderDrawer(){
+  const wl = $('#worldList'); wl.innerHTML='';
+  if(!worlds.length) wl.innerHTML='<div class="empty">还没有剧本。点「+ 新建」写一个。</div>';
+  worlds.forEach(w=>{
+    const d = document.createElement('div'); d.className='item';
+    d.innerHTML = '<div class="t"></div><div class="s">编辑</div><div class="x">✕</div>';
+    d.querySelector('.t').textContent = w.name || '未命名';
+    d.onclick = e=>{
+      if(e.target.classList.contains('x')){ delWorld(w.id); return }
+      if(e.target.classList.contains('s')){ openWorld(w.id); return }
+      startSession(w.id);
+    };
+    wl.appendChild(d);
+  });
+
+  const sl = $('#sessList'); sl.innerHTML='';
+  if(!sessions.length) sl.innerHTML='<div class="empty">还没有存档。</div>';
+  [...sessions].sort((a,b)=>b.at-a.at).forEach(s=>{
+    const w = worlds.find(x=>x.id===s.worldId);
+    const d = document.createElement('div'); d.className='item'+(cur&&cur.id===s.id?' on':'');
+    d.innerHTML = '<div class="t"></div><div class="s"></div><div class="x">✕</div>';
+    d.querySelector('.t').textContent = s.title || '未命名';
+    d.querySelector('.s').textContent = s.turn+' 回';
+    d.onclick = e=>{
+      if(e.target.classList.contains('x')){ delSession(s.id); return }
+      openSession(s.id);
+    };
+    sl.appendChild(d);
+  });
+}
+function delSession(id){
+  if(!confirm('删掉这个存档？删了就回不来了。')) return;
+  sessions = sessions.filter(s=>s.id!==id);
+  if(cur && cur.id===id) cur = null;
+  persist(); renderDrawer(); renderChat();
+}
+function delWorld(id){
+  const used = sessions.some(s=>s.worldId===id);
+  if(!confirm('删掉这个剧本？'+(used?'（它的存档会留着，但没剧本可对照了）':''))) return;
+  worlds = worlds.filter(w=>w.id!==id); S(K.worlds,worlds); renderDrawer();
+}
+
+/* ================= 剧本编辑 ================= */
+function openWorld(id){
+  editingWorld = id ? worlds.find(w=>w.id===id) : {id:uid(),name:'',world:'',hero:'',style:'',chars:[]};
+  if(id && !editingWorld) return;
+  $('#worldTitle').textContent = id ? '编辑剧本' : '新建剧本';
+  $('#wName').value = editingWorld.name||'';
+  $('#wWorld').value = editingWorld.world||'';
+  $('#wHero').value = editingWorld.hero||'';
+  $('#wStyle').value = editingWorld.style||'';
+  renderChars();
+  $('#pageWorld').classList.add('on');
+}
+function renderChars(){
+  const box = $('#charList'); box.innerHTML='';
+  (editingWorld.chars||[]).forEach((c,i)=>{
+    const d = document.createElement('div'); d.className='charCard';
+    d.innerHTML = '<div class="h"><input placeholder="角色名"><button class="danger">删</button></div>'+
+                  '<textarea rows="2" placeholder="身份、性格、和主角的关系…"></textarea>';
+    d.querySelector('input').value = c.name||'';
+    d.querySelector('textarea').value = c.desc||'';
+    d.querySelector('input').oninput = e=>c.name=e.target.value;
+    d.querySelector('textarea').oninput = e=>c.desc=e.target.value;
+    d.querySelector('button').onclick = ()=>{ editingWorld.chars.splice(i,1); renderChars() };
+    box.appendChild(d);
+  });
+}
+function saveWorld(){
+  editingWorld.name = $('#wName').value.trim() || '未命名剧本';
+  editingWorld.world = $('#wWorld').value;
+  editingWorld.hero = $('#wHero').value;
+  editingWorld.style = $('#wStyle').value;
+  const i = worlds.findIndex(w=>w.id===editingWorld.id);
+  if(i>=0) worlds[i] = editingWorld; else worlds.unshift(editingWorld);
+  S(K.worlds,worlds);
+  $('#pageWorld').classList.remove('on');
+  renderDrawer();
+}
+
+/* ================= API ================= */
+function openApi(){
+  $('#aBase').value = api.base||'https://api.deepseek.com/chat/completions';
+  $('#aKey').value = api.key||'';
+  $('#aModel').value = api.model||'deepseek-chat';
+  $('#aTestMsg').textContent='';
+  $('#pageApi').classList.add('on');
+}
+function saveApi(){
+  api = {base:$('#aBase').value.trim()||'https://api.deepseek.com/chat/completions',
+         key:$('#aKey').value.trim(), model:$('#aModel').value.trim()||'deepseek-chat'};
+  S(K.api,api); $('#pageApi').classList.remove('on'); renderChat();
+}
+
+/* ================= 事件 ================= */
+$('#btnDrawer').onclick = openDrawer;
+$('#mask').onclick = closeDrawer;
+$('#drawerClose').onclick = closeDrawer;
+$('#btnApi').onclick = openApi;
+$('#apiBack').onclick = ()=>$('#pageApi').classList.remove('on');
+$('#apiSave').onclick = saveApi;
+$('#apiSave2')&&0;
+$('#aTest').onclick = async ()=>{
+  saveApiDraft();
+  $('#aTestMsg').textContent = '正在试…';
+  try{
+    const t = await chat([{role:'user',content:'只回四个字：连接正常'}],{max_tokens:16});
+    $('#aTestMsg').textContent = '通了：'+t.trim();
+  }catch(e){ $('#aTestMsg').textContent = '失败：'+e.message }
+};
+function saveApiDraft(){
+  api = {base:$('#aBase').value.trim()||'https://api.deepseek.com/chat/completions',
+         key:$('#aKey').value.trim(), model:$('#aModel').value.trim()||'deepseek-chat'};
+  S(K.api,api);
+}
+$('#btnNewWorld').onclick = ()=>openWorld(null);
+$('#worldBack').onclick = ()=>$('#pageWorld').classList.remove('on');
+$('#worldSave').onclick = saveWorld;
+$('#btnAddChar').onclick = ()=>{ editingWorld.chars = editingWorld.chars||[]; editingWorld.chars.push({name:'',desc:''}); renderChars() };
+$('#btnSend').onclick = ()=>submit($('#inp').value);
+$('#inp').addEventListener('keydown', e=>{
+  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); submit($('#inp').value); }
+});
+
+/* 恢复上次的存档 */
+(function boot(){
+  const lastId = localStorage.getItem(K.last);
+  if(lastId) cur = findSession(lastId) || null;
+  renderChat();
+})();
+</script>
+</body>
+</html>
